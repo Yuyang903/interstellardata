@@ -536,17 +536,9 @@
                         document.getElementById('btn-trend-filter-top10').innerHTML = `<i class="fas fa-filter"></i> 只看异动`;
                     }
                 } else {
-                    // For Top 50 (General List): Filter first, then re-sort/rank
+                    // For Top 50 (General List): Filter first, but DO NOT re-rank
                     if (isActive) {
-                        const filtered = list.filter(s => s.tags && s.tags.length > 0);
-                        // Re-sort filtered
-                        const sortedFiltered = [...filtered].sort((a, b) => b.platformPlays[currentPlatform] - a.platformPlays[currentPlatform]);
-                        // Re-rank
-                        displayList = sortedFiltered.map((s, i) => ({
-                             ...s,
-                             displayRank: i + 1,
-                             displayPlays: formatPlays(s.platformPlays[currentPlatform])
-                         }));
+                        displayList = list.filter(s => s.tags && s.tags.length > 0);
                         document.getElementById('btn-trend-filter').innerHTML = `<i class="fas fa-check"></i> 只看异动 (${displayList.length})`;
                     } else {
                         displayList = list;
