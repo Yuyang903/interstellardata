@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星际音乐数据看板</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Data Labels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .card { background-color: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .tag-soar { background-color: #ef4444; color: white; padding: 1px 4px; border-radius: 3px; font-size: 0.65rem; }
+        .tag-new { background-color: #3b82f6; color: white; padding: 1px 4px; border-radius: 3px; font-size: 0.65rem; }
+        .tag-hot { background-color: #8b5cf6; color: white; padding: 1px 4px; border-radius: 3px; font-size: 0.65rem; }
+        .clickable-row:hover { background-color: #334155; cursor: pointer; transition: background 0.2s; }
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar:horizontal { height: 6px; }
+        
+        /* New Styles */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+        .active-nav {
+            background-color: #334155 !important;
+            color: white !important;
+            border-right: 3px solid #3b82f6;
+        }
+        /* Mobile Overlay */
+        .mobile-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
+        }
+        /* Platform Selector Optimization */
+        .custom-select-wrapper {
+            position: relative;
+            user-select: none;
+            width: 100%;
+        }
+        .custom-select {
+            position: relative;
+            cursor: pointer;
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s;
+        }
+        .custom-select:hover {
+            background-color: #334155;
+            border-color: #64748b;
+        }
+        .custom-options {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s;
+            overflow: hidden; /* Removed scroll */
+        }
+        .custom-select.open + .custom-options {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .custom-option {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .custom-option:hover {
+            background-color: #334155;
+        }
+        .custom-option.selected {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .custom-arrow {
+            transition: transform 0.2s;
+        }
+        .custom-select.open .custom-arrow {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans h-screen flex overflow-hidden">
+
+    <!-- Mobile Backdrop -->
+    <div id="mobile-backdrop" onclick="toggleSidebar()" class="fixed inset-0 z-40 hidden md:hidden mobile-overlay transition-opacity duration-300 opacity-0"></div>
+
+    <!-- Sidebar -->
+    <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-slate-800 border-r border-slate-700 flex flex-col flex-shrink-0 transition-transform duration-300 transform -translate-x-full md:relative md:translate-x-0 shadow-2xl md:shadow-none" id="sidebar">
+        <div class="p-6 flex items-center justify-between md:justify-center border-b border-slate-700">
+            <h1 class="text-xl font-bold text-white tracking-wider flex items-center">
+                <i class="fas fa-music mr-2 text-purple-500"></i>
+                <span>星际数据</span>
+            </h1>
+            <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto py-4">
+            <ul class="space-y-1 px-3">
+                <li>
+                    <button onclick="switchTab('tab-top10')" class="nav-item w-full text-left px-4 py-3 rounded-lg flex items-center space-x-3 text-slate-400 hover:bg-slate-700 hover:text-white transition active-nav" id="nav-top10">
+                        <i class="fas fa-trophy w-5 text-center"></i>
+                        <span>TOP10 歌曲</span>
+                    </button>
+                </li>
+                <li>
+                    <button onclick="switchTab('tab-top50')" class="nav-item w-full text-left px-4 py-3 rounded-lg flex items-center space-x-3 text-slate-400 hover:bg-slate-700 hover:text-white transition" id="nav-top50">
+                        <i class="fas fa-list-ol w-5 text-center"></i>
+                        <span>TOP50 歌曲</span>
+                    </button>
+                </li>
+                <li>
+                    <button onclick="switchTab('tab-distribution')" class="nav-item w-full text-left px-4 py-3 rounded-lg flex items-center space-x-3 text-slate-400 hover:bg-slate-700 hover:text-white transition" id="nav-distribution">
+                        <i class="fas fa-chart-line w-5 text-center"></i>
+                        <span>曲库发行概况</span>
+                    </button>
+                </li>
+                <li>
+                    <button onclick="switchTab('tab-structure')" class="nav-item w-full text-left px-4 py-3 rounded-lg flex items-center space-x-3 text-slate-400 hover:bg-slate-700 hover:text-white transition" id="nav-structure">
+                        <i class="fas fa-chart-pie w-5 text-center"></i>
+                        <span>曲库结构情况</span>
+                    </button>
+                </li>
+            </ul>
+        </nav>
+        
+        <div class="p-4 border-t border-slate-700 text-xs text-slate-500 text-center">
+            &copy; 2026 星际音乐数据中心
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto bg-slate-900 p-4 md:p-6 relative w-full" id="main-content">
+        
+        <!-- Header (Global) -->
+        <header class="mb-6 md:mb-8 flex justify-between items-center">
+            <div class="flex items-center">
+                <button onclick="toggleSidebar()" class="mr-4 text-slate-400 hover:text-white md:hidden p-2 rounded-lg hover:bg-slate-800 transition">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <div>
+                    <h2 class="text-xl md:text-2xl font-bold text-white" id="page-title">数据看板</h2>
+                    <div class="hidden md:flex gap-4 mt-2 text-xs text-slate-400">
+                        <div class="flex items-center"><span class="tag-soar mr-1 inline-block whitespace-nowrap">飙升</span> 较昨日排名上升超过10位</div>
+                        <div class="flex items-center"><span class="tag-new mr-1 inline-block whitespace-nowrap">空降</span> 首次进入榜单</div>
+                    </div>
+                </div>
+            </div>
+            <div class="text-right hidden sm:block">
+                <div class="font-mono text-emerald-400 text-sm">最新数据日期：2026-02-05</div>
+            </div>
+            <div class="text-right sm:hidden">
+                <div class="font-mono text-emerald-400 text-xs">最新数据日期：2026-02-05</div>
+            </div>
+        </header>
+
+        <!-- Tab Content: TOP 10 (Original Home) -->
+        <div id="tab-top10" class="tab-content block animate-fade-in">
+            <!-- Platform Selector -->
+            <div class="mb-4">
+                <div class="relative inline-block w-full md:w-64" id="top10-platform-container">
+                    <!-- Custom Select will be rendered here -->
+                </div>
+            </div>
+            
+            <!-- TOP 10 Widget -->
+            <div class="card p-0 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                    <h3 class="font-bold text-lg text-yellow-400"><i class="fas fa-trophy mr-2"></i>TOP 10 歌曲</h3>
+                    <button id="btn-trend-filter-top10" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-white transition border border-slate-600 flex items-center gap-1">
+                        <i class="fas fa-filter"></i> 只看异动
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="text-white font-bold border-b border-slate-700 bg-slate-800/30">
+                            <tr>
+                                <th class="p-3 w-16 md:w-40 text-center">排名</th>
+                                <th class="p-3 md:pl-8">歌曲名称</th>
+                                <th class="p-3 hidden md:table-cell">艺人</th>
+                                <th class="p-3 text-right whitespace-nowrap">播放量</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top10-list">
+                            <!-- JS will populate this -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content: TOP 50 -->
+        <div id="tab-top50" class="tab-content hidden animate-fade-in">
+             <!-- Platform Selector -->
+            <div class="mb-4">
+                <div class="relative inline-block w-full md:w-64" id="top50-platform-container">
+                    <!-- Custom Select will be rendered here -->
+                </div>
+            </div>
+
+             <div class="card p-0 overflow-hidden flex flex-col h-full min-h-[600px]">
+                <div class="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center flex-wrap gap-2 sticky top-0 z-10 backdrop-blur-md">
+                    <h3 class="font-bold text-lg text-blue-400"><i class="fas fa-list-ol mr-2"></i>TOP 50 歌曲</h3>
+                    <button id="btn-trend-filter" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-white transition border border-slate-600 flex items-center gap-1">
+                        <i class="fas fa-filter"></i> 只看异动
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="text-white font-bold border-b border-slate-700 bg-slate-800/30">
+                            <tr>
+                                <th class="p-3 w-16 md:w-40 text-center">排名</th>
+                                <th class="p-3 md:pl-8">歌曲名称</th>
+                                <th class="p-3 hidden md:table-cell">艺人</th>
+                                <th class="p-3 text-right whitespace-nowrap">播放量</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top50-list">
+                            <!-- JS will populate this -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content: Distribution -->
+        <div id="tab-distribution" class="tab-content hidden animate-fade-in">
+             <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="card p-4">
+                    <div class="text-slate-400 text-sm">曲库歌曲总量</div>
+                    <div class="text-2xl font-bold text-white">12,450,000</div>
+                </div>
+                <div class="card p-4">
+                    <div class="text-slate-400 text-sm">上月总发行量</div>
+                    <div class="text-2xl font-bold text-purple-400">45,200</div>
+                </div>
+                <div class="card p-4">
+                    <div class="text-slate-400 text-sm">上月平台引入发行</div>
+                    <div class="text-2xl font-bold text-blue-400">30,150</div>
+                    <div class="text-xs text-slate-500 mt-1">占比 66.7%</div>
+                </div>
+                <div class="card p-4">
+                    <div class="text-slate-400 text-sm">上月线下签约发行</div>
+                    <div class="text-2xl font-bold text-emerald-400">15,050</div>
+                     <div class="text-xs text-slate-500 mt-1">占比 33.3%</div>
+                </div>
+            </div>
+
+            <!-- Main Chart -->
+            <div class="card p-4 mb-6">
+                <h3 class="font-bold text-white mb-4">每月发行总量趋势 (2025-01 至今)</h3>
+                <div class="h-[400px]">
+                    <canvas id="releaseTrendChart"></canvas>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card p-4 lg:col-span-2">
+                    <h3 class="font-bold text-white mb-4">上月流派发行量</h3>
+                    <div class="h-64 flex justify-center">
+                        <canvas id="genreDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content: Structure -->
+        <div id="tab-structure" class="tab-content hidden animate-fade-in">
+             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card p-4 col-span-1">
+                    <h3 class="font-bold text-white mb-4">曲库流派构成</h3>
+                    <div class="h-64 flex justify-center">
+                        <canvas id="genreChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-4 col-span-1">
+                    <h3 class="font-bold text-white mb-4">语种分布</h3>
+                    <div class="h-64 flex justify-center">
+                        <canvas id="languageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Trend Modal -->
+    <div id="trendModal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-slate-800 rounded-xl w-full max-w-3xl border border-slate-600 shadow-2xl p-6 m-4 relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            
+            <div class="flex justify-between items-end mb-6">
+                <div>
+                    <h3 id="modal-song-title" class="text-2xl font-bold text-white">Song Title</h3>
+                    <p class="text-slate-400 mt-1" id="modal-artist">Artist Name</p>
+                    <p class="text-blue-400 font-medium mt-1" id="modal-platform">Platform</p>
+                </div>
+                <div class="flex bg-slate-700 rounded-lg p-1">
+                    <button onclick="updateChartPeriod(7)" id="btn-7days" class="px-4 py-1 rounded text-sm font-medium bg-blue-600 text-white transition">近7天</button>
+                    <button onclick="updateChartPeriod(30)" id="btn-30days" class="px-4 py-1 rounded text-sm font-medium text-slate-300 hover:text-white transition">近30天</button>
+                </div>
+            </div>
+
+            <div class="h-80 w-full">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 0. Mobile Sidebar Logic ---
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('mobile-backdrop');
+            const isClosed = sidebar.classList.contains('-translate-x-full');
+
+            if (isClosed) {
+                // Open
+                sidebar.classList.remove('-translate-x-full');
+                backdrop.classList.remove('hidden');
+                // Small delay to allow display:block to apply before opacity transition
+                setTimeout(() => backdrop.classList.remove('opacity-0'), 10);
+            } else {
+                // Close
+                sidebar.classList.add('-translate-x-full');
+                backdrop.classList.add('opacity-0');
+                setTimeout(() => backdrop.classList.add('hidden'), 300);
+            }
+        }
+
+        // --- 1. Data Generation ---
+        const generateTrend = (days) => Array.from({length: days}, () => Math.floor(Math.random() * 500000) + 100000);
+        
+        // Mock Real Data
+        const realSongs = [
+            { title: "乌梅子酱", artist: "李荣浩" },
+            { title: "爱在西元前", artist: "周杰伦" },
+            { title: "笼", artist: "张碧晨" },
+            { title: "悬溺", artist: "葛东琪" },
+            { title: "想去海边", artist: "夏日入侵企画" },
+            { title: "多远都要在一起", artist: "G.E.M.邓紫棋" },
+            { title: "这世界那么多人", artist: "莫文蔚" },
+            { title: "孤勇者", artist: "陈奕迅" },
+            { title: "水星记", artist: "郭顶" },
+            { title: "起风了", artist: "买辣椒也用券" },
+            { title: "New Boy", artist: "朴树" },
+            { title: "Last Dance", artist: "伍佰 & China Blue" },
+            { title: "红色高跟鞋", artist: "蔡健雅" },
+            { title: "漠河舞厅", artist: "柳爽" },
+            { title: "秒针", artist: "阿梨粤" },
+            { title: "给你一瓶魔法药水", artist: "告五人" },
+            { title: "如愿", artist: "王菲" },
+            { title: "本草纲目", artist: "周杰伦" },
+            { title: "爱你", artist: "王心凌" },
+            { title: "体面", artist: "于文文" }
+        ];
+
+        // Format number helper
+        const formatPlays = (num) => {
+            if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            }
+            return num.toLocaleString();
+        };
+
+        // Generate 50 songs
+        const songs = Array.from({length: 50}, (_, i) => {
+            const isSoaring = Math.random() > 0.8;
+            const isNew = Math.random() > 0.85;
+            const isMobile = Math.random() > 0.4;
+            
+            const songInfo = realSongs[i % realSongs.length];
+            // Add variation to repeated songs
+            const title = i < realSongs.length ? songInfo.title : `${songInfo.title} (Live版)`;
+            
+            const rawPlays = Math.floor(Math.random() * 10000000 * (1 - i/100));
+            
+            return {
+                rank: i + 1,
+                title: title,
+                artist: songInfo.artist,
+                playsRaw: rawPlays,
+                plays: formatPlays(rawPlays),
+                tags: [
+                    isSoaring ? 'soaring' : null, 
+                    isNew ? 'new' : null
+                ].filter(Boolean),
+                isMobile: isMobile,
+                trend7: generateTrend(7),
+                trend30: generateTrend(30),
+                // Simulate platform specific data
+                platformPlays: {
+                    'all': rawPlays,
+                    'tme': Math.floor(rawPlays * 0.4),
+                    'netease': Math.floor(rawPlays * 0.35),
+                    'apple': Math.floor(rawPlays * 0.1),
+                    'youtube': Math.floor(rawPlays * 0.05),
+                    'spotify': Math.floor(rawPlays * 0.1)
+                }
+            };
+        });
+
+        // --- 1.1 Platform Selection Logic ---
+        const platforms = [
+            { id: 'all', name: '平台汇总' },
+            { id: 'tme', name: 'TME' },
+            { id: 'netease', name: '网易云' },
+            { id: 'apple', name: 'AppleMusic' },
+            { id: 'youtube', name: 'Youtube' },
+            { id: 'spotify', name: 'Spotify' }
+        ];
+
+        let currentPlatform = 'all';
+
+        function renderPlatformTabs(targetId, callback) {
+            const container = document.getElementById(targetId);
+            const isTop10 = targetId.includes('top10');
+            const selectId = isTop10 ? 'top10-select' : 'top50-select';
+            
+            const currentPlatformName = platforms.find(p => p.id === currentPlatform)?.name || '平台汇总';
+
+            const html = `
+                <div class="custom-select-wrapper">
+                    <div class="custom-select" onclick="toggleSelect('${selectId}')" id="${selectId}">
+                        <span class="selected-value">${currentPlatformName}</span>
+                        <i class="fas fa-chevron-down text-xs custom-arrow"></i>
+                    </div>
+                    <div class="custom-options">
+                        ${platforms.map(p => `
+                            <div class="custom-option ${p.id === currentPlatform ? 'selected' : ''}" 
+                                 onclick="selectOption('${p.id}', '${p.name}', '${selectId}')">
+                                <span>${p.name}</span>
+                                ${p.id === currentPlatform ? '<i class="fas fa-check text-xs"></i>' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        function toggleSelect(id) {
+            const select = document.getElementById(id);
+            const allSelects = document.querySelectorAll('.custom-select');
+            
+            // Close other selects
+            allSelects.forEach(s => {
+                if(s.id !== id) s.classList.remove('open');
+            });
+            
+            select.classList.toggle('open');
+        }
+
+        function selectOption(platformId, platformName, selectId) {
+            handlePlatformChange(platformId);
+            
+            // Close all selects
+            document.querySelectorAll('.custom-select').forEach(s => s.classList.remove('open'));
+        }
+
+        // Close select when clicking outside
+        window.addEventListener('click', function(e) {
+            if (!e.target.closest('.custom-select-wrapper')) {
+                document.querySelectorAll('.custom-select').forEach(s => s.classList.remove('open'));
+            }
+        });
+
+        function handlePlatformChange(platformId, sourceId) {
+            currentPlatform = platformId;
+            const platformName = platforms.find(p => p.id === currentPlatform)?.name;
+            
+            // Update UI for both custom selects
+            ['top10-platform-container', 'top50-platform-container'].forEach(containerId => {
+                renderPlatformTabs(containerId);
+            });
+
+            // Re-render lists based on new platform data
+            // We need to re-sort songs based on the selected platform plays
+            const sortedSongs = [...songs].sort((a, b) => b.platformPlays[platformId] - a.platformPlays[platformId]);
+            
+            // Update ranks for display
+            const rankedSongs = sortedSongs.map((s, i) => ({
+                ...s,
+                displayRank: i + 1,
+                displayPlays: formatPlays(s.platformPlays[platformId])
+            }));
+
+            // Apply filters
+            const filterAndRender = (list, targetId, isActive) => {
+                let displayList;
+                
+                if (targetId === 'top10-list') {
+                    // For Top 10: First take top 10 ranked songs, THEN filter if needed
+                    const top10Songs = list.slice(0, 10);
+                    if (isActive) {
+                        displayList = top10Songs.filter(s => s.tags && s.tags.length > 0);
+                        document.getElementById('btn-trend-filter-top10').innerHTML = `<i class="fas fa-check"></i> 只看异动 (${displayList.length})`;
+                    } else {
+                        displayList = top10Songs;
+                        document.getElementById('btn-trend-filter-top10').innerHTML = `<i class="fas fa-filter"></i> 只看异动`;
+                    }
+                } else {
+                    // For Top 50 (General List): Filter first, then re-sort/rank
+                    if (isActive) {
+                        const filtered = list.filter(s => s.tags && s.tags.length > 0);
+                        // Re-sort filtered
+                        const sortedFiltered = [...filtered].sort((a, b) => b.platformPlays[currentPlatform] - a.platformPlays[currentPlatform]);
+                        // Re-rank
+                        displayList = sortedFiltered.map((s, i) => ({
+                             ...s,
+                             displayRank: i + 1,
+                             displayPlays: formatPlays(s.platformPlays[currentPlatform])
+                         }));
+                        document.getElementById('btn-trend-filter').innerHTML = `<i class="fas fa-check"></i> 只看异动 (${displayList.length})`;
+                    } else {
+                        displayList = list;
+                        document.getElementById('btn-trend-filter').innerHTML = `<i class="fas fa-filter"></i> 只看异动`;
+                    }
+                }
+                
+                renderList(targetId, displayList, targetId === 'top50-list');
+            };
+
+            filterAndRender(rankedSongs, 'top10-list', isTop10TrendFilterActive);
+            filterAndRender(rankedSongs, 'top50-list', isTrendFilterActive);
+        }
+
+        // Initialize Platform Tabs
+        renderPlatformTabs('top10-platform-container');
+        renderPlatformTabs('top50-platform-container');
+
+        // --- 2. Tab Switching Logic ---
+        function switchTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('block');
+            });
+            // Show selected tab
+            const selectedTab = document.getElementById(tabId);
+            selectedTab.classList.remove('hidden');
+            selectedTab.classList.add('block');
+
+            // Update Nav Styles
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active-nav');
+                el.classList.remove('bg-slate-700');
+                el.classList.remove('text-white');
+                el.classList.add('text-slate-400');
+            });
+            
+            const activeNav = document.getElementById('nav-' + tabId.replace('tab-', ''));
+            if(activeNav) activeNav.classList.add('active-nav');
+            
+            // Update Header Title based on Tab
+            const titles = {
+                'tab-top10': 'TOP 10 歌曲',
+                'tab-top50': 'TOP 50 歌曲',
+                'tab-distribution': '曲库发行概况',
+                'tab-structure': '曲库结构情况'
+            };
+            document.getElementById('page-title').innerText = titles[tabId] || '数据看板';
+            
+            // Trigger chart resize if needed
+            window.dispatchEvent(new Event('resize'));
+            
+            // Close sidebar on mobile after selection
+            if (window.innerWidth < 768) {
+                toggleSidebar();
+            }
+        }
+
+        // --- 3. List Rendering ---
+        function renderList(targetId, data, isFullView = false) {
+            const tbody = document.getElementById(targetId);
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            data.forEach(song => {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable-row border-b border-slate-700 hover:bg-slate-800 transition';
+                tr.onclick = () => openModal(song);
+                
+                let tagsHtml = '';
+                // Check if both tags are present
+                if(song.tags.includes('new') && song.tags.includes('soaring')) {
+                    tagsHtml = `<span class="tag-hot inline-block whitespace-nowrap">空降飙升</span>`;
+                } else if(song.tags.includes('new')) {
+                    tagsHtml = `<span class="tag-new inline-block whitespace-nowrap">空降</span>`;
+                } else if(song.tags.includes('soaring')) {
+                    tagsHtml = `<span class="tag-soar inline-block whitespace-nowrap">飙升</span>`;
+                }
+                
+                const displayRank = song.displayRank || song.rank;
+                const displayPlays = song.displayPlays || song.plays;
+
+                tr.innerHTML = `
+                    <td class="p-3 font-mono text-slate-400 w-16 md:w-40 text-center relative">
+                        <div class="flex items-center justify-center relative w-full h-full">
+                            <span class="text-lg inline-block w-8 text-center">${displayRank}</span>
+                            <div class="hidden md:block absolute left-[50%] ml-4 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none">${tagsHtml}</div>
+                        </div>
+                        <div class="mt-1 flex justify-center space-x-1 md:hidden">${tagsHtml}</div>
+                    </td>
+                    <td class="p-3 md:pl-8">
+                        <div class="font-bold text-white">${song.title}</div>
+                        <div class="text-xs text-slate-500 md:hidden">${song.artist}</div>
+                    </td>
+                    <td class="p-3 hidden md:table-cell text-slate-400">
+                        ${song.artist}
+                    </td>
+                    <td class="p-3 text-right font-mono text-emerald-400 whitespace-nowrap">${displayPlays}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Initial Render
+        renderList('top10-list', songs.slice(0, 10));
+        renderList('top50-list', songs, true);
+
+        // --- 4. Filtering Logic ---
+        let isTrendFilterActive = false;
+        let isTop10TrendFilterActive = false;
+
+        function setupFilter(btnId, isTop10) {
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                btn.addEventListener('click', function() {
+                    const isActive = isTop10 ? !isTop10TrendFilterActive : !isTrendFilterActive;
+                    if (isTop10) isTop10TrendFilterActive = isActive;
+                    else isTrendFilterActive = isActive;
+                    
+                    this.classList.toggle('bg-blue-600');
+                    this.classList.toggle('border-blue-500');
+                    
+                    // Re-trigger handlePlatformChange to apply filter
+                    handlePlatformChange(currentPlatform);
+
+                    if (isActive) {
+                        // this.innerHTML = `<i class="fas fa-check"></i> 只看异动`; // Updated inside filterAndRender
+                    } else {
+                        // this.innerHTML = `<i class="fas fa-filter"></i> 只看异动`; // Updated inside filterAndRender
+                    }
+                });
+            }
+        }
+
+        setupFilter('btn-trend-filter', false); // Top 50
+        setupFilter('btn-trend-filter-top10', true); // Top 10
+
+        // --- 5. Modal & Trend Chart ---
+        let trendChartInstance = null;
+        let currentSong = null;
+        let currentPeriod = 7;
+
+        function openModal(song) {
+            currentSong = song;
+            currentPeriod = 7;
+            document.getElementById('modal-song-title').innerText = song.title;
+            document.getElementById('modal-artist').innerText = song.artist;
+            
+            // Get current platform name
+            const platformObj = platforms.find(p => p.id === currentPlatform);
+            document.getElementById('modal-platform').innerText = platformObj ? platformObj.name : '平台汇总';
+            
+            document.getElementById('trendModal').classList.remove('hidden');
+            updateButtonStyles();
+            renderTrendChart();
+        }
+
+        function closeModal() {
+            document.getElementById('trendModal').classList.add('hidden');
+        }
+
+        function updateChartPeriod(days) {
+            currentPeriod = days;
+            updateButtonStyles();
+            renderTrendChart();
+        }
+
+        function updateButtonStyles() {
+            const btn7 = document.getElementById('btn-7days');
+            const btn30 = document.getElementById('btn-30days');
+            
+            if (currentPeriod === 7) {
+                btn7.className = "px-4 py-1 rounded text-sm font-medium bg-blue-600 text-white transition shadow-lg";
+                btn30.className = "px-4 py-1 rounded text-sm font-medium text-slate-400 hover:text-white transition";
+            } else {
+                btn7.className = "px-4 py-1 rounded text-sm font-medium text-slate-400 hover:text-white transition";
+                btn30.className = "px-4 py-1 rounded text-sm font-medium bg-blue-600 text-white transition shadow-lg";
+            }
+        }
+
+        function renderTrendChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            // Helper to generate date labels like "01-23"
+            const generateDateLabels = (count) => {
+                const labels = [];
+                const today = new Date();
+                for (let i = count - 1; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(today.getDate() - i);
+                    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                    const day = d.getDate().toString().padStart(2, '0');
+                    labels.push(`${month}-${day}`);
+                }
+                return labels;
+            };
+
+            const labels = generateDateLabels(currentPeriod);
+            const data = currentPeriod === 7 ? currentSong.trend7 : currentSong.trend30;
+
+            if (trendChartInstance) {
+                trendChartInstance.destroy();
+            }
+
+            trendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '播放趋势',
+                        data: data,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false },
+                        datalabels: {
+                            color: 'white',
+                            align: 'top',
+                            anchor: 'start',
+                            offset: 4,
+                            font: { weight: 'bold', size: 12 },
+                            formatter: (value) => formatPlays(value)
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            grid: { color: '#334155' }, 
+                            ticks: { color: '#94a3b8' },
+                            // Add padding to top to prevent label cutoff
+                            suggestedMax: Math.max(...data) * 1.2
+                        },
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        // --- 6. Platform Chart (Tab 1) ---
+        // Removed as per request
+
+        // --- 7. New Charts for "Distribution" & "Structure" ---
+        
+        // Helper for common options
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { labels: { color: '#94a3b8' } },
+                datalabels: {
+                    color: 'white',
+                    anchor: 'end',
+                    align: 'end',
+                    offset: 4,
+                    font: { weight: 'bold', size: 11 },
+                    formatter: Math.round
+                }
+            },
+            scales: {
+                y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+            }
+        };
+        
+        // Register the plugin globally
+        Chart.register(ChartDataLabels);
+
+        const pieOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } }
+        };
+
+        // 7.1 Release Trend (Bar Chart - Horizontal)
+        new Chart(document.getElementById('releaseTrendChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: [
+                    '2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06',
+                    '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12',
+                    '2026-01', '2026-02'
+                ],
+                datasets: [{
+                    label: '每月发行总量',
+                    data: [35000, 36500, 38000, 40100, 41200, 42500, 43000, 44200, 43800, 44500, 45100, 46000, 44800, 45200],
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y', // Horizontal bar chart
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        color: 'white',
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 4
+                    }
+                },
+                scales: {
+                    y: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                    x: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { color: '#94a3b8' },
+                        suggestedMax: 50000 // Ensure space for labels
+                    }
+                }
+            }
+        });
+
+        // 7.2 Genre Distribution (Bar)
+        new Chart(document.getElementById('genreDistributionChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['流行', '摇滚', '电子', '民谣', '古典', '其他'],
+                datasets: [{
+                    label: '发行量',
+                    data: [12000, 5000, 4500, 3000, 2000, 1500],
+                    backgroundColor: ['#ec4899', '#ef4444', '#8b5cf6', '#10b981', '#f59e0b', '#64748b'],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        color: 'white',
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 4,
+                        font: { weight: 'bold', size: 11 },
+                        formatter: Math.round
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#334155' }, 
+                        ticks: { color: '#94a3b8' },
+                        suggestedMax: 14000 // Ensure space for top label
+                    },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        // 7.4 Genre Chart (Bar)
+        new Chart(document.getElementById('genreChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['流行', '摇滚', '电子', '民谣', '古典', '其他'],
+                datasets: [{
+                    label: '歌曲数量',
+                    data: [40, 15, 20, 10, 5, 10],
+                    backgroundColor: ['#ec4899', '#ef4444', '#8b5cf6', '#10b981', '#f59e0b', '#64748b'],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        color: 'white',
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 4,
+                        font: { weight: 'bold', size: 11 },
+                        formatter: Math.round
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#334155' }, 
+                        ticks: { color: '#94a3b8' },
+                        suggestedMax: 50 // Ensure space for top label
+                    },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        // 7.5 Language Chart (Bar)
+        new Chart(document.getElementById('languageChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['国语', '英语', '日语', '韩语', '粤语'],
+                datasets: [{
+                    label: '歌曲数量',
+                    data: [50, 30, 8, 7, 5],
+                    backgroundColor: ['#ef4444', '#3b82f6', '#f59e0b', '#ec4899', '#10b981'],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        color: 'white',
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 4,
+                        font: { weight: 'bold', size: 11 },
+                        formatter: Math.round
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#334155' }, 
+                        ticks: { color: '#94a3b8' },
+                        suggestedMax: 60 // Ensure space for top label
+                    },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        // 7.6 Copyright Chart (Bar)
+        // Removed as per request
+
+        // 7.7 Era Chart (Line)
+        // Removed as per request
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('trendModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
