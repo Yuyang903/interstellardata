@@ -409,14 +409,29 @@
             // Add variation to repeated songs
             const title = i < realSongs.length ? songInfo.title : `${songInfo.title} (Live版)`;
             
-            const rawPlays = Math.floor(Math.random() * 10000000 * (1 - i/100));
+            // Base plays factor (decreasing trend but with randomness)
+            const basePlays = Math.floor(Math.random() * 5000000) + 1000000; 
             
+            // Helper to generate platform specific plays with high variance
+            const getPlatformPlays = (base, multiplier) => {
+                // Variance factor between 0.2 and 3.0 to drastically change rankings
+                const variance = 0.2 + Math.random() * 2.8;
+                return Math.floor(base * multiplier * variance);
+            };
+
+            const tme = getPlatformPlays(basePlays, 0.4);
+            const netease = getPlatformPlays(basePlays, 0.35);
+            const apple = getPlatformPlays(basePlays, 0.2);
+            const youtube = getPlatformPlays(basePlays, 0.15);
+            const spotify = getPlatformPlays(basePlays, 0.2);
+            const all = tme + netease + apple + youtube + spotify;
+
             return {
-                rank: i + 1,
+                rank: i + 1, // Initial rank, will be recalculated
                 title: title,
                 artist: songInfo.artist,
-                playsRaw: rawPlays,
-                plays: formatPlays(rawPlays),
+                playsRaw: all, // Set initial raw plays to total
+                plays: formatPlays(all),
                 tags: [
                     isSoaring ? 'soaring' : null, 
                     isNew ? 'new' : null
@@ -426,15 +441,20 @@
                 trend30: generateTrend(30),
                 // Simulate platform specific data
                 platformPlays: {
-                    'all': rawPlays,
-                    'tme': Math.floor(rawPlays * 0.4),
-                    'netease': Math.floor(rawPlays * 0.35),
-                    'apple': Math.floor(rawPlays * 0.1),
-                    'youtube': Math.floor(rawPlays * 0.05),
-                    'spotify': Math.floor(rawPlays * 0.1)
+                    'all': all,
+                    'tme': tme,
+                    'netease': netease,
+                    'apple': apple,
+                    'youtube': youtube,
+                    'spotify': spotify
                 }
             };
         });
+
+        // Initial sort by 'all' plays to establish correct initial order
+        songs.sort((a, b) => b.platformPlays.all - a.platformPlays.all);
+        // Re-assign initial ranks based on sorted order
+        songs.forEach((s, i) => s.rank = i + 1);
 
         // --- 1.1 Platform Selection Logic ---
         const platforms = [
